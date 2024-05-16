@@ -1,8 +1,11 @@
 pragma solidity ^0.8.0;
 
 contract TrainCrossing {
+
+    enum CrossingState { FREE_TO_CROSS, LOCKED, PRE_LOCKED }
+
+    CrossingState public crossingState;
     address public infrastructure; // Address of the railway infrastructure
-    uint public crossingState; // 0 - LOCKED, 1 - FREE TO CROSS, 2 - PRE-LOCKED
     uint public lastUpdate; // Timestamp of the last state update
     uint public crossingValidity; // Validity time of the "FREE TO CROSS" state
     uint public maxCarsPerLane; // Maximum number of crossing cars per lane
@@ -24,17 +27,17 @@ contract TrainCrossing {
     }
     
     modifier onlyFreeToCross() {
-        require(crossingState == 1, "Crossing is not free to cross.");
+        require(crossingState == CrossingState.FREE_TO_CROSS, "Crossing is not free to cross.");
         _;
     }
     
     modifier onlyNotLocked() {
-        require(crossingState != 0, "Crossing is locked.");
+        require(crossingState != CrossingState.LOCKED, "Crossing is locked.");
         _;
     }
     
     modifier onlyInSpecialState() {
-        require(crossingState == 2, "Crossing is not in pre-locked state.");
+        require(crossingState == CrossingState.PRE_LOCKED, "Crossing is not in pre-locked state.");
         _;
     }
 
@@ -48,7 +51,7 @@ contract TrainCrossing {
         crossingValidity = _crossingValidity;
         maxCarsPerLane = _maxCarsPerLane;
         preLockedTime = _preLockedTime;
-        crossingState = 0; // Initialize with LOCKED state
+        crossingState = CrossingState.LOCKED; // Initialize with LOCKED state
         currentCrossingCarNumber = 0; // Initialize with 0 crossing cars
         lastUpdate = block.timestamp;
     }
@@ -70,16 +73,16 @@ contract TrainCrossing {
         require(crossingCars[msg.sender], "You don't have permission to release.");
         crossingCars[msg.sender] = false;
         currentCrossingCarNumber--;
-        if(crossingState == 2 && currentCrossingCarNumber == 0) // in PRE-LOCKED state and crossing is empty
+        if(crossingState == CrossingState.PRE_LOCKED && currentCrossingCarNumber == 0) // in PRE-LOCKED state and crossing is empty
         {
-            crossingState = 1;
+            crossingState = CrossingState.LOCKED;
             // TODO Maybe here give all the trains the crossing permission
         }
         emit PermissionReleased(msg.sender);
     }
     
     function updateFreeToCrossState() external onlyInfrastructure {
-        crossingState = 1;
+        crossingState = CrossingState.FREE_TO_CROSS;
         lastUpdate = block.timestamp;
     }
 
@@ -96,12 +99,12 @@ contract TrainCrossing {
         }
         if(currentCrossingCarNumber == 0)
         {
-            crossingState = 0; // LOCKED
+            crossingState = CrossingState.LOCKED; // LOCKED
             // TODO Maybe give here a permission...
         }
         else 
         {
-            crossingState = 2; // PRE-LOCKED
+            crossingState = CrossingState.PRE_LOCKED; // PRE-LOCKED
         }
     }
 
