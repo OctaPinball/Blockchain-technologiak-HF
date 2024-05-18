@@ -16,6 +16,7 @@ contract TrainCrossing {
     mapping(address => bool) public crossingVehicles;
     mapping(address => bool) public trainCrossingRequests;
     mapping(address => uint) public trainRequestTimes;
+    mapping(address => bool) public authorizedTrains;
     
     event CarCrossingPermissionGranted(address requester);
     event CarCrossingPermissionReleased(address requester);
@@ -27,6 +28,11 @@ contract TrainCrossing {
     
     modifier onlyInfrastructure() {
         require(msg.sender == infrastructure, "Only infrastructure can call this function.");
+        _;
+    }
+
+    modifier onlyAuthorizedTrain() {
+        require(authorizedTrains[msg.sender], "Not authorized train.");
         _;
     }
     
@@ -56,7 +62,7 @@ contract TrainCrossing {
         trainCrossingRequestNumber = 0;
         lastUpdate = block.timestamp;
     }
-    
+
     // Functions for Cars
     function requestCarPermission() external onlyFreeToCross onlyWhenCrossingNotFull {
         require(!crossingVehicles[msg.sender], "Already crossing");
@@ -73,7 +79,7 @@ contract TrainCrossing {
     }
     
     // Functions for Trains
-    function requestTrainCrossing() external {
+    function requestTrainCrossing() external onlyAuthorizedTrain {
         emit TrainCrossingRequest(msg.sender, !trainCrossingRequests[msg.sender]);
 
         if (!trainCrossingRequests[msg.sender]) {
@@ -95,7 +101,7 @@ contract TrainCrossing {
         }
     }
 
-    function releaseTrainCrossing() external {
+    function releaseTrainCrossing() external onlyAuthorizedTrain {
         require(trainCrossingRequests[msg.sender], "You don't have permission to release.");
         trainCrossingRequests[msg.sender] = false;
         trainCrossingRequestNumber--;
@@ -111,6 +117,14 @@ contract TrainCrossing {
     function updateFreeToCrossState() external onlyInfrastructure {
         crossingState = CrossingState.FREE_TO_CROSS;
         lastUpdate = block.timestamp;
+    }
+
+    function authorizeTrain(address train) external onlyInfrastructure {
+        authorizedTrains[train] = true;
+    }
+
+    function deauthorizeTrain(address train) external onlyInfrastructure {
+        authorizedTrains[train] = false;
     }
 
     function checkFreeToCrossTimer() internal {
