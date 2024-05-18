@@ -57,40 +57,23 @@ contract TrainCrossing {
         lastUpdate = block.timestamp;
     }
     
-    function requestPermission() external onlyFreeToCross onlyWhenCrossingNotFull {
+    // Functions for Cars
+    function requestCarPermission() external onlyFreeToCross onlyWhenCrossingNotFull {
         require(!crossingVehicles[msg.sender], "Already crossing");
         crossingVehicles[msg.sender] = true;
         currentCrossingCarNumber++;
         emit CarCrossingPermissionGranted(msg.sender);
     }
 
-    function releasePermission() external {
+    function releaseCarPermission() external {
         require(crossingVehicles[msg.sender], "Vehicle has not requested permission");
         crossingVehicles[msg.sender] = false;
         currentCrossingCarNumber--;
         emit CarCrossingPermissionReleased(msg.sender);
     }
     
-    function updateFreeToCrossState() external onlyInfrastructure {
-        crossingState = CrossingState.FREE_TO_CROSS;
-        lastUpdate = block.timestamp;
-    }
-
-    function checkFreeToCrossTimer() internal {
-        if (block.timestamp - lastUpdate > crossingValidity && crossingState == CrossingState.FREE_TO_CROSS) {
-            lockCrossing();
-        }
-    }
-
-    function lockCrossing() internal {
-        if (currentCrossingCarNumber > 0) {
-            crossingState = CrossingState.PRE_LOCKED;
-        } else {
-            crossingState = CrossingState.LOCKED;
-        }
-    }
-    
-    function trainRequestCrossing() external {
+    // Functions for Trains
+    function requestTrainCrossing() external {
         emit TrainCrossingRequest(msg.sender, !trainCrossingRequests[msg.sender]);
 
         if (!trainCrossingRequests[msg.sender]) {
@@ -112,7 +95,7 @@ contract TrainCrossing {
         }
     }
 
-    function trainReleaseCrossing() external {
+    function releaseTrainCrossing() external {
         require(trainCrossingRequests[msg.sender], "You don't have permission to release.");
         trainCrossingRequests[msg.sender] = false;
         trainCrossingRequestNumber--;
@@ -122,5 +105,25 @@ contract TrainCrossing {
         }
         
         emit TrainCrossingPermissionReleased(msg.sender);
+    }
+
+    // Administrative Functions
+    function updateFreeToCrossState() external onlyInfrastructure {
+        crossingState = CrossingState.FREE_TO_CROSS;
+        lastUpdate = block.timestamp;
+    }
+
+    function checkFreeToCrossTimer() internal {
+        if (block.timestamp - lastUpdate > crossingValidity && crossingState == CrossingState.FREE_TO_CROSS) {
+            lockCrossing();
+        }
+    }
+
+    function lockCrossing() internal {
+        if (currentCrossingCarNumber > 0) {
+            crossingState = CrossingState.PRE_LOCKED;
+        } else {
+            crossingState = CrossingState.LOCKED;
+        }
     }
 }
