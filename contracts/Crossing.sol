@@ -11,15 +11,20 @@ contract TrainCrossing {
     uint public maxCarsPerLane; // Maximum number of crossing cars per lane
     uint public preLockedTime; // Maximum elapsed time since the first train crossing request, after which the train brakes
     uint public currentCrossingCarNumber; // Number of cars, which are currently crossing
+    uint public trainCrossingRequestNumber;
     
     mapping(address => bool) public crossingVehicles; // Mapping to track crossing cars
     mapping(address => bool) public trainCrossingRequests;
     mapping(address => uint) public trainRequestTimes;
     
-    event CrossRequest(address requester);
-    event PermissionGranted(address requester);
-    event PermissionReleased(address requester);
-    event TrainApproaching();
+    event CarCrossRequest(address requester);
+    event CarCrossingPermissionGranted(address requester);
+    event CarCrossingPermissionReleased(address requester);
+    event TrainCrossingRequest(address requester, bool first);
+    event TrainCrossingPermissionGranted(address requester);
+    event TrainCrossingWaitingForRetry(address requester);
+    event StopTrain(address requester);
+    event TrainCrossingPermissionReleased(address requester);
     
     modifier onlyInfrastructure() {
         require(msg.sender == infrastructure, "Only infrastructure can call this function.");
@@ -27,17 +32,13 @@ contract TrainCrossing {
     }
     
     modifier onlyFreeToCross() {
+        checkFreeToCrossTimer();
         require(crossingState == CrossingState.FREE_TO_CROSS, "Crossing is not free to cross.");
         _;
     }
     
     modifier onlyNotLocked() {
         require(crossingState != CrossingState.LOCKED, "Crossing is locked.");
-        _;
-    }
-    
-    modifier onlyInSpecialState() {
-        require(crossingState == CrossingState.PRE_LOCKED, "Crossing is not in pre-locked state.");
         _;
     }
 
@@ -53,20 +54,21 @@ contract TrainCrossing {
         preLockedTime = _preLockedTime;
         crossingState = CrossingState.LOCKED; // Initialize with LOCKED state
         currentCrossingCarNumber = 0; // Initialize with 0 crossing cars
+        trainCrossingRequestNumber = 0;
         lastUpdate = block.timestamp;
     }
     
     function requestPermission() external onlyFreeToCross onlyWhenCrossingNotFull {
         crossingVehicles[msg.sender] = true;
         currentCrossingCarNumber++;
-        emit PermissionGranted(msg.sender);
+        emit CarCrossingPermissionGranted(msg.sender);
     }
 
     function releasePermission() external {
         require(crossingVehicles[msg.sender], "Vehicle has not requested permission");
         crossingVehicles[msg.sender] = false;
         currentCrossingCarNumber--;
-        emit PermissionReleased(msg.sender);
+        emit CarCrossingPermissionReleased(msg.sender);
     }
     
     function updateFreeToCrossState() external onlyInfrastructure {
@@ -74,35 +76,63 @@ contract TrainCrossing {
         lastUpdate = block.timestamp;
     }
 
-    function freeToCrossExpire() internal {
-        // If now - lastUpdate > crossingValidity
-        // Exit from FREE TO CROSS
+    function checkFreeToCrossTimer() internal {
+        if(block.timestamp - lastUpdate > crossingValidity && crossingState == CrossingState.FREE_TO_CROSS)
+        {
+            lockCrossing();
+        }
+    }
+
+    function lockCrossing() internal {
+        if(currentCrossingCarNumber > 0)
+        {
+            crossingState = CrossingState.PRE_LOCKED;
+        }
+        else
+        {
+            crossingState = CrossingState.LOCKED;
+        }
     }
     
     function trainRequestCrossing() external {
-        if(trainCrossingRequests[msg.sender] = false) // First request
+        emit TrainCrossingRequest(msg.sender, trainCrossingRequests[msg.sender]);
+        if(!trainCrossingRequests[msg.sender]) // First request
         {
             trainCrossingRequests[msg.sender] = true;
             trainRequestTimes[msg.sender] = block.timestamp;
+            trainCrossingRequestNumber++;
         }
-        if(currentCrossingCarNumber == 0)
+
+        lockCrossing();
+
+        if(crossingState == CrossingState.PRE_LOCKED)
         {
-            crossingState = CrossingState.LOCKED; // LOCKED
-            // TODO Maybe give here a permission...
+            if(block.timestamp - trainRequestTimes[msg.sender] > preLockedTime)
+            {
+                emit StopTrain(msg.sender);
+                return;
+            }
+            emit TrainCrossingWaitingForRetry(msg.sender);
+            return;
+
         }
-        else 
+        if(crossingState == CrossingState.LOCKED)
         {
-            crossingState = CrossingState.PRE_LOCKED; // PRE-LOCKED
+            emit TrainCrossingPermissionGranted(msg.sender);
+            return;
         }
+
     }
 
     function trainReleaseCrossing() external {
         require(crossingVehicles[msg.sender], "You don't have permission to release.");
         crossingVehicles[msg.sender] = false;
+        trainCrossingRequestNumber--;
+        if(trainCrossingRequestNumber == 0)
+        {
+            crossingState = CrossingState.FREE_TO_CROSS;
+        }
+        emit TrainCrossingPermissionReleased(msg.sender);
     }
 
-    function stopTrain() internal {
-        // If now - trainRequestTimes[msg.sender] > preLockedTime
-        // STOP TRAIN
-    }
 }
