@@ -41,11 +41,6 @@ contract TrainCrossing {
         require(crossingState == CrossingState.FREE_TO_CROSS, "Crossing is not free to cross.");
         _;
     }
-    
-    modifier onlyNotLocked() {
-        require(crossingState != CrossingState.LOCKED, "Crossing is locked.");
-        _;
-    }
 
     modifier onlyWhenCrossingNotFull() {
         require(currentCrossingCarNumber < maxCarsPerLane, "Crossing is full.");
